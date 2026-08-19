@@ -12,7 +12,32 @@ import {
   RotateCcw,
   Download,
   AlertCircle,
+  Type,
+  FileText,
+  Palette,
+  Hash,
+  Shuffle,
 } from "lucide-react";
+
+/* touch "melt" ripple — spawns a soft liquid blob at the touch point
+   that blurs/expands/fades. attach with onPointerDown={melt} on any
+   element that also has className "melt-surface" (relative + overflow-hidden). */
+function melt(e) {
+  const el = e.currentTarget;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left;
+  const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top;
+  const blob = document.createElement("span");
+  blob.className = "melt-blob";
+  const size = Math.max(rect.width, rect.height) * 1.6;
+  blob.style.width = `${size}px`;
+  blob.style.height = `${size}px`;
+  blob.style.left = `${x - size / 2}px`;
+  blob.style.top = `${y - size / 2}px`;
+  blob.addEventListener("animationend", () => blob.remove());
+  el.appendChild(blob);
+}
 
 /* ---------------------------------------------------------
    DESIGN TOKENS
@@ -88,15 +113,57 @@ input[type="checkbox"] { accent-color: #E8A33D; }
 }
 .loader-fade-out { animation: fadeOut 0.5s ease forwards; }
 @keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
+
+/* ---- melt touch ripple ---- */
+.melt-surface { position: relative; overflow: hidden; }
+.melt-blob {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232,163,61,0.38), rgba(79,209,197,0.18) 55%, transparent 72%);
+  filter: blur(2px);
+  transform: scale(0);
+  animation: meltRipple 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes meltRipple {
+  0%   { transform: scale(0);   opacity: 0.6; border-radius: 42% 58% 65% 35% / 45% 45% 55% 55%; }
+  55%  { opacity: 0.32;         border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%; }
+  100% { transform: scale(2.6); opacity: 0;   border-radius: 50%; }
+}
+
+/* ---- smooth tool-switch transition ---- */
+.tool-enter { animation: toolIn 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes toolIn {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.99); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* every interactive control eases the same way, so nothing feels stiff */
+button, select, input, textarea, a { transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 `;
 
-const TOOLS = [
-  { id: "qr", label: "QR Code", sub: "Text \u2192 scannable code", icon: QrCode },
-  { id: "password", label: "Password", sub: "Generate & measure", icon: KeyRound },
-  { id: "units", label: "Unit Convert", sub: "Length, weight, temp", icon: Ruler },
-  { id: "json", label: "JSON Format", sub: "Prettify & validate", icon: Braces },
-  { id: "pomodoro", label: "Focus Timer", sub: "Work / break cycles", icon: TimerIcon },
+const TOOL_GROUPS = [
+  {
+    label: "Everyday",
+    tools: [
+      { id: "qr", label: "QR Code", sub: "Text \u2192 scannable code", icon: QrCode },
+      { id: "password", label: "Password", sub: "Generate & measure", icon: KeyRound },
+      { id: "units", label: "Unit Convert", sub: "Length, weight, temp", icon: Ruler },
+      { id: "json", label: "JSON Format", sub: "Prettify & validate", icon: Braces },
+      { id: "pomodoro", label: "Focus Timer", sub: "Work / break cycles", icon: TimerIcon },
+    ],
+  },
+  {
+    label: "Text & Design",
+    tools: [
+      { id: "textcase", label: "Text Case", sub: "UPPER, snake, camel...", icon: Type },
+      { id: "markdown", label: "Markdown", sub: "Live split preview", icon: FileText },
+      { id: "palette", label: "Color Palette", sub: "Shades from one hex", icon: Palette },
+      { id: "counter", label: "Word Count", sub: "Words, chars, read time", icon: Hash },
+    ],
+  },
 ];
+const TOOLS = TOOL_GROUPS.flatMap((g) => g.tools);
 
 /* ---------- shared bits ---------- */
 
@@ -268,7 +335,8 @@ function PasswordTool() {
         <CopyButton value={password} disabled={!password} />
         <button
           onClick={generate}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155] transition-colors"
+          onPointerDown={melt}
+          className="melt-surface inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155]"
         >
           <RotateCcw size={15} /> Regenerate
         </button>
@@ -498,7 +566,8 @@ function JSONTool() {
 
       <button
         onClick={format}
-        className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155] transition-colors"
+        onPointerDown={melt}
+        className="melt-surface mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155]"
       >
         Format & validate
       </button>
@@ -639,18 +708,307 @@ function PomodoroTool() {
           <button
             onClick={() => setRunning((r) => !r)}
             disabled={secondsLeft === 0}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155] transition-colors disabled:opacity-40"
+            onPointerDown={melt}
+            className="melt-surface inline-flex items-center gap-2 px-6 py-2.5 rounded-md bg-[#E8A33D] text-[#14151A] font-body text-sm font-medium hover:bg-[#f0b155] disabled:opacity-40"
           >
             {running ? <Pause size={15} /> : <Play size={15} />}
             {running ? "Pause" : "Start"}
           </button>
           <button
             onClick={reset}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-[#23262F] border border-[#2E313C] text-[#F2F0EB] font-body text-sm hover:border-[#E8A33D]/50 transition-colors"
+            onPointerDown={melt}
+            className="melt-surface inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-[#23262F] border border-[#2E313C] text-[#F2F0EB] font-body text-sm hover:border-[#E8A33D]/50"
           >
             <RotateCcw size={15} />
           </button>
         </div>
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- 6. TEXT CASE ---------- */
+
+function toTitleCase(s) {
+  return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
+}
+function toCamelCase(s) {
+  return s
+    .toLowerCase()
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase());
+}
+function toSnakeCase(s) {
+  return s
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .toLowerCase()
+    .replace(/^_+|_+$/g, "");
+}
+function toSentenceCase(s) {
+  const lower = s.toLowerCase();
+  return lower.replace(/(^\s*\w|[.!?]\s*\w)/g, (c) => c.toUpperCase());
+}
+
+function TextCaseTool() {
+  const [text, setText] = useState("the quick ninja jumps over the lazy loader");
+  const [output, setOutput] = useState("");
+
+  const actions = [
+    ["UPPERCASE", (s) => s.toUpperCase()],
+    ["lowercase", (s) => s.toLowerCase()],
+    ["Title Case", toTitleCase],
+    ["Sentence case", toSentenceCase],
+    ["camelCase", toCamelCase],
+    ["snake_case", toSnakeCase],
+  ];
+
+  return (
+    <Panel
+      eyebrow="06 / Transform"
+      title="Text case converter"
+      description="Type anything, tap a style to convert it — handy for variable names, titles, headers."
+    >
+      <Field label="Input">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+          className="w-full resize-none rounded-md bg-[#23262F] border border-[#2E313C] px-4 py-3 font-body text-sm text-[#F2F0EB] focus:outline-none focus:border-[#E8A33D]"
+        />
+      </Field>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        {actions.map(([label, fn]) => (
+          <button
+            key={label}
+            onPointerDown={melt}
+            onClick={() => setOutput(fn(text))}
+            className="melt-surface px-3.5 py-2 rounded-md bg-[#23262F] border border-[#2E313C] font-mono text-xs text-[#ACAFBB] hover:border-[#E8A33D]/50 hover:text-[#F2F0EB]"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <Field label="Result">
+        <div className="rounded-md bg-[#23262F] border border-[#2E313C] px-4 py-3 min-h-[52px] font-mono text-sm text-[#4FD1C5] break-all">
+          {output || "\u2014"}
+        </div>
+      </Field>
+      <CopyButton value={output} disabled={!output} />
+    </Panel>
+  );
+}
+
+/* ---------- 7. MARKDOWN PREVIEW ---------- */
+
+function renderMarkdown(md) {
+  let html = md
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  html = html
+    .replace(/^### (.*$)/gim, '<h3 style="color:#F2F0EB;font-weight:600;margin:10px 0 4px">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 style="color:#F2F0EB;font-weight:600;margin:12px 0 6px">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 style="color:#F2F0EB;font-weight:700;margin:14px 0 8px">$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#F2F0EB">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background:#14151A;color:#E8A33D;padding:1px 5px;border-radius:4px">$1</code>')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" style="color:#4FD1C5;text-decoration:underline">$1</a>')
+    .replace(/^\s*-\s+(.*$)/gim, '<li style="margin-left:18px">$1</li>')
+    .replace(/\n{2,}/g, "<br/><br/>")
+    .replace(/\n/g, "<br/>");
+
+  return html;
+}
+
+function MarkdownTool() {
+  const [md, setMd] = useState("# Heading\n\nSome **bold** and *italic* text.\n\n- item one\n- item two\n\n`inline code` and a [link](https://claude.ai)");
+
+  return (
+    <Panel
+      eyebrow="07 / Preview"
+      title="Markdown editor"
+      description="Write on the left, see the rendered result on the right — updates live."
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Markdown">
+          <textarea
+            value={md}
+            onChange={(e) => setMd(e.target.value)}
+            rows={10}
+            className="w-full resize-none rounded-md bg-[#23262F] border border-[#2E313C] px-4 py-3 font-mono text-[13px] text-[#F2F0EB] focus:outline-none focus:border-[#E8A33D]"
+          />
+        </Field>
+        <Field label="Preview">
+          <div
+            className="rounded-md bg-[#23262F] border border-[#2E313C] px-4 py-3 h-[196px] overflow-y-auto font-body text-sm text-[#ACAFBB] leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(md) }}
+          />
+        </Field>
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- 8. COLOR PALETTE ---------- */
+
+function hexToHsl(hex) {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    h /= 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, "0");
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+function randomHex() {
+  return `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+function PaletteTool() {
+  const [base, setBase] = useState("#E8A33D");
+  const [copiedHex, setCopiedHex] = useState("");
+
+  const palette = useMemo(() => {
+    try {
+      const [h, s] = hexToHsl(base);
+      const lights = [88, 68, 50, 32, 16];
+      return lights.map((l) => hslToHex(h, Math.max(s, 35), l));
+    } catch {
+      return [];
+    }
+  }, [base]);
+
+  const copy = async (hex) => {
+    try {
+      await navigator.clipboard.writeText(hex);
+      setCopiedHex(hex);
+      setTimeout(() => setCopiedHex(""), 1200);
+    } catch {}
+  };
+
+  return (
+    <Panel
+      eyebrow="08 / Palette"
+      title="Color palette generator"
+      description="Pick a base color — get five tonal shades. Tap any swatch to copy its hex."
+    >
+      <Field label="Base color">
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={base}
+            onChange={(e) => setBase(e.target.value)}
+            className="w-12 h-12 rounded-md bg-transparent border border-[#2E313C] cursor-pointer"
+          />
+          <input
+            type="text"
+            value={base}
+            onChange={(e) => setBase(e.target.value)}
+            className="flex-1 rounded-md bg-[#23262F] border border-[#2E313C] px-3 py-2.5 font-mono text-sm text-[#F2F0EB] focus:outline-none focus:border-[#E8A33D]"
+          />
+          <button
+            onPointerDown={melt}
+            onClick={() => setBase(randomHex())}
+            className="melt-surface inline-flex items-center gap-2 px-3.5 py-2.5 rounded-md bg-[#23262F] border border-[#2E313C] text-[#ACAFBB] hover:border-[#E8A33D]/50"
+          >
+            <Shuffle size={15} />
+          </button>
+        </div>
+      </Field>
+
+      <div className="flex rounded-md overflow-hidden border border-[#2E313C]">
+        {palette.map((hex) => (
+          <button
+            key={hex}
+            onPointerDown={melt}
+            onClick={() => copy(hex)}
+            className="melt-surface flex-1 h-24 flex items-end justify-center pb-2"
+            style={{ background: hex }}
+          >
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white">
+              {copiedHex === hex ? "Copied" : hex}
+            </span>
+          </button>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- 9. WORD COUNTER ---------- */
+
+function CounterTool() {
+  const [text, setText] = useState(
+    "Paste or type anything here \u2014 stats update as you go."
+  );
+
+  const stats = useMemo(() => {
+    const trimmed = text.trim();
+    const words = trimmed ? trimmed.split(/\s+/).length : 0;
+    const chars = text.length;
+    const charsNoSpace = text.replace(/\s/g, "").length;
+    const sentences = (trimmed.match(/[.!?]+/g) || []).length || (trimmed ? 1 : 0);
+    const readMins = Math.max(1, Math.round(words / 200));
+    return { words, chars, charsNoSpace, sentences, readMins };
+  }, [text]);
+
+  const cards = [
+    ["Words", stats.words],
+    ["Characters", stats.chars],
+    ["No spaces", stats.charsNoSpace],
+    ["Sentences", stats.sentences],
+    ["Read time", `${stats.readMins} min`],
+  ];
+
+  return (
+    <Panel
+      eyebrow="09 / Measure"
+      title="Word counter"
+      description="Live word, character, and reading-time stats as you type or paste."
+    >
+      <Field label="Text">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={6}
+          className="w-full resize-none rounded-md bg-[#23262F] border border-[#2E313C] px-4 py-3 font-body text-sm text-[#F2F0EB] focus:outline-none focus:border-[#E8A33D]"
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {cards.map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-md bg-[#23262F] border border-[#2E313C] px-3 py-3 text-center"
+          >
+            <div className="font-display text-xl font-semibold text-[#4FD1C5]">{value}</div>
+            <div className="font-mono text-[10px] uppercase tracking-wide text-[#6E7180] mt-1">
+              {label}
+            </div>
+          </div>
+        ))}
       </div>
     </Panel>
   );
@@ -784,6 +1142,14 @@ export default function Toolkit() {
         return <JSONTool />;
       case "pomodoro":
         return <PomodoroTool />;
+      case "textcase":
+        return <TextCaseTool />;
+      case "markdown":
+        return <MarkdownTool />;
+      case "palette":
+        return <PaletteTool />;
+      case "counter":
+        return <CounterTool />;
       default:
         return null;
     }
@@ -804,38 +1170,51 @@ export default function Toolkit() {
           <p className="font-mono text-[11px] text-[#6E7180] mt-1">5 drawers, always open</p>
         </div>
         <nav className="flex md:flex-col overflow-x-auto md:overflow-visible">
-          {TOOLS.map((t) => {
-            const Icon = t.icon;
-            const isActive = active === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActive(t.id)}
-                className={`drawer-tab ${isActive ? "active" : ""} flex items-center gap-3 px-5 py-4 text-left shrink-0 md:w-full border-r md:border-r-0 border-[#2E313C] transition-colors ${
-                  isActive ? "bg-[#23262F]" : "hover:bg-[#1F212A]"
-                }`}
-              >
-                <Icon size={18} className={isActive ? "text-[#E8A33D]" : "text-[#6E7180]"} />
-                <span className="min-w-[110px]">
-                  <span
-                    className={`block font-body text-sm ${
-                      isActive ? "text-[#F2F0EB] font-medium" : "text-[#ACAFBB]"
+          {TOOL_GROUPS.map((group) => (
+            <div key={group.label} className="shrink-0 md:shrink md:w-full">
+              <p className="hidden md:block px-5 pt-4 pb-1 font-mono text-[10px] tracking-[0.2em] uppercase text-[#4A4D59]">
+                {group.label}
+              </p>
+              {group.tools.map((t) => {
+                const Icon = t.icon;
+                const isActive = active === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onPointerDown={melt}
+                    onClick={() => setActive(t.id)}
+                    className={`melt-surface drawer-tab ${isActive ? "active" : ""} flex items-center gap-3 px-5 py-4 text-left shrink-0 md:w-full border-r md:border-r-0 border-[#2E313C] ${
+                      isActive ? "bg-[#23262F]" : "hover:bg-[#1F212A]"
                     }`}
                   >
-                    {t.label}
-                  </span>
-                  <span className="hidden md:block font-mono text-[10px] text-[#6E7180] mt-0.5">
-                    {t.sub}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+                    <Icon size={18} className={isActive ? "text-[#E8A33D]" : "text-[#6E7180]"} />
+                    <span className="min-w-[110px]">
+                      <span
+                        className={`block font-body text-sm ${
+                          isActive ? "text-[#F2F0EB] font-medium" : "text-[#ACAFBB]"
+                        }`}
+                      >
+                        {t.label}
+                      </span>
+                      <span className="hidden md:block font-mono text-[10px] text-[#6E7180] mt-0.5">
+                        {t.sub}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 px-6 py-10 sm:px-10 md:px-14 md:py-14">{renderTool()}</main>
+      <main className="flex-1 px-6 py-10 sm:px-10 md:px-14 md:py-14">
+        <div key={active} className="tool-enter">
+          {renderTool()}
+        </div>
+      </main>
     </div>
   );
 }
+
